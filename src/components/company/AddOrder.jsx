@@ -29,7 +29,7 @@ import {
   Delete as DeleteIcon,
   Save as SaveIcon
 } from '@mui/icons-material';
-import supabase from '../../supabase';
+import { supabase } from '../../integrations/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Generate a unique numeric-only order number
