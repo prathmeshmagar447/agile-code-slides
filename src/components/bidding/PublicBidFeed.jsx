@@ -70,13 +70,13 @@ const PublicBidFeed = () => {
   const filteredRfqs = rfqs.filter(rfq => {
     // Search term filter
     const searchMatch = 
-      rfq.material.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rfq.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      rfq.material?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      rfq.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (rfq.description && rfq.description.toLowerCase().includes(searchTerm.toLowerCase()));
     
     // Material filter
     const materialMatch = 
-      !filters.material || rfq.material.toLowerCase().includes(filters.material.toLowerCase());
+      !filters.material || rfq.material?.toLowerCase().includes(filters.material.toLowerCase());
     
     // Status filter
     const statusMatch = !filters.status || rfq.status === filters.status;
@@ -180,7 +180,7 @@ const PublicBidFeed = () => {
               >
                 <MenuItem value="">All Materials</MenuItem>
                 {/* Get unique materials */}
-                {[...new Set(rfqs.map(rfq => rfq.material))].map(material => (
+                {[...new Set(rfqs.filter(rfq => rfq.material).map(rfq => rfq.material))].map(material => (
                   <MenuItem key={material} value={material}>{material}</MenuItem>
                 ))}
               </Select>
@@ -227,7 +227,7 @@ const PublicBidFeed = () => {
                 <CardContent sx={{ flexGrow: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                     <Typography variant="h6" gutterBottom noWrap sx={{ maxWidth: '70%' }}>
-                      {rfq.itemName}
+                      {rfq.material || rfq.itemName}
                     </Typography>
                     <Chip 
                       label={rfq.status} 
@@ -295,7 +295,7 @@ const PublicBidFeed = () => {
           {selectedRfq && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle1" gutterBottom>
-                RFQ: {selectedRfq.itemName} ({selectedRfq.quantity} {selectedRfq.unit})
+                RFQ: {selectedRfq.material || selectedRfq.itemName} ({selectedRfq.quantity} {selectedRfq.unit})
               </Typography>
               
               <Grid container spacing={2} sx={{ mt: 1 }}>
