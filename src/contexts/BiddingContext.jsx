@@ -16,12 +16,14 @@ export function BiddingProvider({ children }) {
   const [error, setError] = useState('');
   const [rfqs, setRfqs] = useState([]);
   const [bids, setBids] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
   // Load data from Supabase on mount
   useEffect(() => {
     if (currentUser) {
       loadRfqsFromSupabase();
       loadBidsFromSupabase();
+      loadNotifications();
     }
   }, [currentUser]);
 
@@ -40,7 +42,30 @@ export function BiddingProvider({ children }) {
       if (error) throw error;
       
       if (data) {
-        setRfqs(data);
+        // Enhance RFQs with company information
+        const enhancedRfqs = await Promise.all(data.map(async (rfq) => {
+          // Get company details for each RFQ
+          if (rfq.created_by) {
+            const { data: companyData } = await supabase
+              .from('users')
+              .select('name')
+              .eq('id', rfq.created_by)
+              .single();
+            
+            return {
+              ...rfq,
+              companyName: companyData?.name || 'Unknown Company',
+              // Map database fields to UI naming convention
+              itemName: rfq.material,
+              bidDeadline: rfq.deadline,
+              deliveryLocation: rfq.description?.split('\n')?.[0] || 'Not specified',
+              status: rfq.status || 'Posted',
+            };
+          }
+          return rfq;
+        }));
+        
+        setRfqs(enhancedRfqs);
       }
     } catch (err) {
       console.error('Error loading RFQs:', err);
@@ -65,13 +90,58 @@ export function BiddingProvider({ children }) {
       if (error) throw error;
       
       if (data) {
-        setBids(data);
+        // Enhance bids with supplier information
+        const enhancedBids = await Promise.all(data.map(async (bid) => {
+          // Get supplier details for each bid
+          if (bid.supplier_id) {
+            const { data: supplierData } = await supabase
+              .from('users')
+              .select('name')
+              .eq('id', bid.supplier_id)
+              .single();
+            
+            return {
+              ...bid,
+              supplierName: supplierData?.name || 'Unknown Supplier',
+              rfqId: bid.bid_id,
+              status: bid.status || 'Submitted',
+              deliveryDate: new Date(new Date().getTime() + (bid.delivery_time || 7 * 24 * 60 * 60 * 1000)),
+              terms: bid.notes,
+              createdAt: bid.created_at,
+              selected: false,
+            };
+          }
+          return bid;
+        }));
+        
+        setBids(enhancedBids);
       }
     } catch (err) {
       console.error('Error loading bids:', err);
       setError('Failed to load bids');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  // Load notifications from Supabase
+  const loadNotifications = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      
+      if (data) {
+        setNotifications(data);
+      }
+    } catch (err) {
+      console.error('Error loading notifications:', err);
     }
   };
 
@@ -81,16 +151,17 @@ export function BiddingProvider({ children }) {
     setError('');
     
     try {
+      // Format description to include delivery location
+      const description = rfqData.deliveryLocation + 
+        (rfqData.description ? `\n${rfqData.description}` : '');
+      
       const newRfq = {
         created_by: currentUser.id,
         material: rfqData.itemName,
         quantity: rfqData.quantity,
         unit: rfqData.unit || 'units',
         deadline: rfqData.bidDeadline,
-        description: rfqData.description,
-        delivery_location: rfqData.deliveryLocation,
-        expected_price: rfqData.expectedPrice,
-        delivery_timeline: rfqData.deliveryTimeline,
+        description: description,
         status: 'Posted'
       };
       
@@ -103,9 +174,34 @@ export function BiddingProvider({ children }) {
       
       // Add the new RFQ to the local state
       if (data && data.length > 0) {
-        setRfqs(prevRfqs => [...prevRfqs, data[0]]);
+        const enhancedRfq = {
+          ...data[0],
+          companyName: currentUser.name || 'Unknown Company',
+          itemName: data[0].material,
+          bidDeadline: data[0].deadline,
+          deliveryLocation: rfqData.deliveryLocation,
+          status: 'Posted',
+        };
+        
+        setRfqs(prevRfqs => [...prevRfqs, enhancedRfq]);
+        
+        // Notify all suppliers of new RFQ
+        const { data: suppliersData } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role', 'supplier');
+          
+        if (suppliersData) {
+          for (const supplier of suppliersData) {
+            await createNotification('new_bid', 
+              `New RFQ: ${rfqData.itemName}`, 
+              data[0].id, 
+              supplier.id);
+          }
+        }
+        
         toast.success('RFQ created successfully');
-        return data[0];
+        return enhancedRfq;
       }
     } catch (err) {
       console.error('Failed to create RFQ:', err);
@@ -123,29 +219,99 @@ export function BiddingProvider({ children }) {
     setError('');
     
     try {
+      // Convert delivery date to interval (days from now)
+      const deliveryDate = new Date(bidData.deliveryDate);
+      const nowDate = new Date();
+      const deliveryInterval = Math.ceil((deliveryDate - nowDate) / (1000 * 60 * 60 * 24));
+      
       const newBid = {
         bid_id: rfqId,
         supplier_id: currentUser.id,
         price: bidData.price,
         quantity_offered: bidData.quantityOffered || null,
-        delivery_time: bidData.deliveryDate,
+        delivery_time: `${deliveryInterval} days`,
         notes: bidData.terms,
-        documents: bidData.documents || [],
         status: 'Submitted'
       };
       
-      const { data, error } = await supabase
-        .from('bid_responses')
-        .insert(newBid)
-        .select();
+      // Check if this is an update to an existing bid
+      const existingBid = bids.find(b => b.supplier_id === currentUser.id && b.bid_id === rfqId);
+      
+      let data, error;
+      
+      if (existingBid) {
+        // Update existing bid
+        const { data: updatedData, error: updateError } = await supabase
+          .from('bid_responses')
+          .update(newBid)
+          .eq('id', existingBid.id)
+          .select();
+          
+        data = updatedData;
+        error = updateError;
+      } else {
+        // Create new bid
+        const { data: insertedData, error: insertError } = await supabase
+          .from('bid_responses')
+          .insert(newBid)
+          .select();
+          
+        data = insertedData;
+        error = insertError;
+      }
         
       if (error) throw error;
       
-      // Add the new bid to the local state
+      // Update local state
       if (data && data.length > 0) {
-        setBids(prevBids => [...prevBids, data[0]]);
-        toast.success('Bid submitted successfully');
-        return data[0];
+        const enhancedBid = {
+          ...data[0],
+          supplierName: currentUser.name || 'Unknown Supplier',
+          rfqId: data[0].bid_id,
+          status: 'Submitted',
+          deliveryDate: deliveryDate,
+          terms: bidData.terms,
+          createdAt: data[0].created_at,
+          selected: false,
+        };
+        
+        if (existingBid) {
+          setBids(prevBids => prevBids.map(b => 
+            b.id === enhancedBid.id ? enhancedBid : b
+          ));
+          toast.success('Bid updated successfully');
+        } else {
+          setBids(prevBids => [...prevBids, enhancedBid]);
+          toast.success('Bid submitted successfully');
+          
+          // Notify the company about the new bid
+          const rfq = rfqs.find(r => r.id === rfqId);
+          if (rfq && rfq.created_by) {
+            await createNotification('new_bid_response', 
+              `New bid received for: ${rfq.material}`, 
+              rfqId, 
+              rfq.created_by);
+          }
+          
+          // Notify other suppliers about bid activity
+          const { data: suppliersData } = await supabase
+            .from('users')
+            .select('id')
+            .eq('role', 'supplier')
+            .neq('id', currentUser.id);
+            
+          if (suppliersData) {
+            const rfq = rfqs.find(r => r.id === rfqId);
+            for (const supplier of suppliersData) {
+              await createNotification('bid_activity', 
+                `New competitive bid on: ${rfq?.material || 'RFQ'}`, 
+                rfqId, 
+                supplier.id);
+            }
+          }
+        }
+        
+        return enhancedBid;
       }
     } catch (err) {
       console.error('Failed to submit bid:', err);
@@ -179,18 +345,17 @@ export function BiddingProvider({ children }) {
           )
         );
         
-        // If a bid is accepted, update the RFQ status to Awarded
-        if (status === 'Accepted') {
-          const bid = bids.find(b => b.id === bidId);
-          if (bid) {
-            await updateRfqStatus(bid.bid_id, 'Awarded');
+        // Notify the supplier about their bid status
+        const bid = bids.find(b => b.id === bidId);
+        if (bid && bid.supplier_id) {
+          const statusMessage = status === 'Accepted' ? 
+            'Congratulations! Your bid has been accepted' : 
+            'Your bid has been rejected';
             
-            // Reject all other bids for this RFQ
-            const otherBids = bids.filter(b => b.bid_id === bid.bid_id && b.id !== bidId);
-            for (const otherBid of otherBids) {
-              await updateBidStatus(otherBid.id, 'Rejected');
-            }
-          }
+          await createNotification('bid_status_update', 
+            statusMessage, 
+            bid.bid_id, 
+            bid.supplier_id);
         }
         
         toast.success(`Bid ${status.toLowerCase()} successfully`);
@@ -228,14 +393,14 @@ export function BiddingProvider({ children }) {
           )
         );
         
-        // If an RFQ is closed, reject all pending bids
-        if (status === 'Closed') {
-          const pendingBids = bids.filter(bid => 
-            bid.bid_id === rfqId && bid.status === 'Submitted'
-          );
-          
-          for (const pendingBid of pendingBids) {
-            await updateBidStatus(pendingBid.id, 'Rejected');
+        // Notify all suppliers who bid on this RFQ
+        const rfqBids = bids.filter(bid => bid.bid_id === rfqId);
+        for (const bid of rfqBids) {
+          if (bid.supplier_id) {
+            await createNotification('rfq_status_update', 
+              `An RFQ you bid on has been ${status.toLowerCase()}`, 
+              rfqId, 
+              bid.supplier_id);
           }
         }
         
@@ -254,34 +419,15 @@ export function BiddingProvider({ children }) {
 
   // Get RFQs based on user role
   const getRfqs = () => {
-    if (userRole === 'company') {
-      // Companies see their own RFQs
-      return rfqs.filter(rfq => rfq.created_by === currentUser.id);
-    } else if (userRole === 'supplier') {
-      // Suppliers see all available RFQs
-      return rfqs.filter(rfq => rfq.status === 'Posted' || rfq.status === 'Bidding');
-    }
-    return [];
+    return rfqs;
   };
 
-  // Get bids based on user role
+  // Get bids based on user role and optional RFQ ID
   const getBids = (rfqId = null) => {
-    if (userRole === 'company') {
-      // Companies see bids for their RFQs
-      const companyRfqIds = rfqs
-        .filter(rfq => rfq.created_by === currentUser.id)
-        .map(rfq => rfq.id);
-      
-      return rfqId 
-        ? bids.filter(bid => bid.bid_id === rfqId)
-        : bids.filter(bid => companyRfqIds.includes(bid.bid_id));
-    } else if (userRole === 'supplier') {
-      // Suppliers see their own bids
-      return rfqId 
-        ? bids.filter(bid => bid.bid_id === rfqId && bid.supplier_id === currentUser.id)
-        : bids.filter(bid => bid.supplier_id === currentUser.id);
+    if (rfqId) {
+      return bids.filter(bid => bid.bid_id === rfqId);
     }
-    return [];
+    return bids;
   };
 
   // Get a specific RFQ by ID
@@ -289,42 +435,26 @@ export function BiddingProvider({ children }) {
     return rfqs.find(rfq => rfq.id === rfqId) || null;
   };
 
-  // Get a specific bid by ID
-  const getBidById = (bidId) => {
-    return bids.find(bid => bid.id === bidId) || null;
-  };
-
-  // Create notifications for suppliers when a new bid is posted
+  // Create notification
   const createNotification = async (type, message, relatedBid, recipientId) => {
     try {
-      await supabase.from('notifications').insert({
+      const { error } = await supabase.from('notifications').insert({
         user_id: recipientId,
         type,
         message,
         related_bid: relatedBid,
         seen: false
       });
+      
+      if (error) console.error('Failed to create notification:', error);
     } catch (err) {
       console.error('Failed to create notification:', err);
     }
   };
 
   // Get notifications for the current user
-  const getNotifications = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      
-      return data || [];
-    } catch (err) {
-      console.error('Failed to get notifications:', err);
-      return [];
-    }
+  const getNotifications = () => {
+    return notifications;
   };
 
   // Mark a notification as read
@@ -334,6 +464,12 @@ export function BiddingProvider({ children }) {
         .from('notifications')
         .update({ seen: true })
         .eq('id', notificationId);
+        
+      setNotifications(prev => 
+        prev.map(notification => 
+          notification.id === notificationId ? { ...notification, seen: true } : notification
+        )
+      );
     } catch (err) {
       console.error('Failed to mark notification as read:', err);
     }
@@ -346,6 +482,8 @@ export function BiddingProvider({ children }) {
         .from('notifications')
         .update({ seen: true })
         .eq('user_id', currentUser.id);
+        
+      setNotifications(prev => prev.map(notification => ({ ...notification, seen: true })));
     } catch (err) {
       console.error('Failed to mark all notifications as read:', err);
     }
@@ -361,13 +499,13 @@ export function BiddingProvider({ children }) {
     getRfqs,
     getBids,
     getRfqById,
-    getBidById,
     getNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
     refreshData: async () => {
       await loadRfqsFromSupabase();
       await loadBidsFromSupabase();
+      await loadNotifications();
     }
   };
 
