@@ -165,12 +165,17 @@ export function BiddingProvider({ children }) {
         status: 'Posted'
       };
       
+      console.log('Creating new RFQ:', newRfq);
+      
       const { data, error } = await supabase
         .from('bids')
         .insert(newRfq)
         .select();
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating RFQ:', error);
+        throw error;
+      }
       
       // Add the new RFQ to the local state
       if (data && data.length > 0) {
@@ -432,6 +437,49 @@ export function BiddingProvider({ children }) {
     return rfqs;
   };
 
+  // Get all RFQs for public feed
+  const getAllRfqs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bids')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      
+      if (data) {
+        // Enhance RFQs with company information
+        const enhancedRfqs = await Promise.all(data.map(async (rfq) => {
+          // Get company details for each RFQ
+          if (rfq.created_by) {
+            const { data: companyData } = await supabase
+              .from('users')
+              .select('name')
+              .eq('id', rfq.created_by)
+              .single();
+            
+            return {
+              ...rfq,
+              companyName: companyData?.name || 'Unknown Company',
+              // Map database fields to UI naming convention
+              itemName: rfq.material,
+              bidDeadline: rfq.deadline,
+              deliveryLocation: rfq.description?.split('\n')?.[0] || 'Not specified',
+              status: rfq.status || 'Posted',
+            };
+          }
+          return rfq;
+        }));
+        
+        return enhancedRfqs;
+      }
+      return [];
+    } catch (err) {
+      console.error('Error loading all RFQs:', err);
+      return [];
+    }
+  };
+
   // Get bids based on user role and optional RFQ ID
   const getBids = (rfqId = null) => {
     if (rfqId) {
@@ -443,6 +491,85 @@ export function BiddingProvider({ children }) {
   // Get a specific RFQ by ID
   const getRfqById = (rfqId) => {
     return rfqs.find(rfq => rfq.id === rfqId) || null;
+  };
+
+  // Get a specific RFQ by ID from Supabase
+  const fetchRfqById = async (rfqId) => {
+    try {
+      const { data, error } = await supabase
+        .from('bids')
+        .select('*')
+        .eq('id', rfqId)
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        // Get company details
+        const { data: companyData } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', data.created_by)
+          .single();
+          
+        return {
+          ...data,
+          companyName: companyData?.name || 'Unknown Company',
+          itemName: data.material,
+          bidDeadline: data.deadline,
+          deliveryLocation: data.description?.split('\n')?.[0] || 'Not specified',
+          status: data.status || 'Posted',
+        };
+      }
+      return null;
+    } catch (err) {
+      console.error('Error fetching RFQ:', err);
+      return null;
+    }
+  };
+
+  // Get bids for a specific RFQ from Supabase
+  const fetchBidsForRfq = async (rfqId) => {
+    try {
+      const { data, error } = await supabase
+        .from('bid_responses')
+        .select('*')
+        .eq('bid_id', rfqId);
+        
+      if (error) throw error;
+      
+      if (data) {
+        // Enhance bids with supplier information
+        const enhancedBids = await Promise.all(data.map(async (bid) => {
+          // Get supplier details for each bid
+          if (bid.supplier_id) {
+            const { data: supplierData } = await supabase
+              .from('users')
+              .select('name')
+              .eq('id', bid.supplier_id)
+              .single();
+            
+            return {
+              ...bid,
+              supplierName: supplierData?.name || 'Unknown Supplier',
+              rfqId: bid.bid_id,
+              status: bid.status || 'Submitted',
+              deliveryDate: new Date(new Date().getTime() + (bid.delivery_time || 7 * 24 * 60 * 60 * 1000)),
+              terms: bid.notes,
+              createdAt: bid.created_at,
+              selected: false,
+            };
+          }
+          return bid;
+        }));
+        
+        return enhancedBids;
+      }
+      return [];
+    } catch (err) {
+      console.error('Error fetching bids for RFQ:', err);
+      return [];
+    }
   };
 
   // Get notifications for the current user
@@ -490,8 +617,11 @@ export function BiddingProvider({ children }) {
     updateBidStatus,
     updateRfqStatus,
     getRfqs,
+    getAllRfqs,
     getBids,
     getRfqById,
+    fetchRfqById,
+    fetchBidsForRfq,
     getNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
