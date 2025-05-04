@@ -1,7 +1,7 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { supabase } from '../integrations/supabase/client';
+import { supabase, createNotification } from '../integrations/supabase/client';
 import { toast } from 'react-hot-toast';
 
 const BiddingContext = createContext();
@@ -193,10 +193,12 @@ export function BiddingProvider({ children }) {
           
         if (suppliersData) {
           for (const supplier of suppliersData) {
-            await createNotification('new_bid', 
+            await createNotification(
+              supplier.id,
+              'new_bid', 
               `New RFQ: ${rfqData.itemName}`, 
-              data[0].id, 
-              supplier.id);
+              data[0].id
+            );
           }
         }
         
@@ -287,10 +289,12 @@ export function BiddingProvider({ children }) {
           // Notify the company about the new bid
           const rfq = rfqs.find(r => r.id === rfqId);
           if (rfq && rfq.created_by) {
-            await createNotification('new_bid_response', 
+            await createNotification(
+              rfq.created_by,
+              'new_bid_response', 
               `New bid received for: ${rfq.material}`, 
-              rfqId, 
-              rfq.created_by);
+              rfqId
+            );
           }
           
           // Notify other suppliers about bid activity
@@ -303,10 +307,12 @@ export function BiddingProvider({ children }) {
           if (suppliersData) {
             const rfq = rfqs.find(r => r.id === rfqId);
             for (const supplier of suppliersData) {
-              await createNotification('bid_activity', 
+              await createNotification(
+                supplier.id,
+                'bid_activity', 
                 `New competitive bid on: ${rfq?.material || 'RFQ'}`, 
-                rfqId, 
-                supplier.id);
+                rfqId
+              );
             }
           }
         }
@@ -352,10 +358,12 @@ export function BiddingProvider({ children }) {
             'Congratulations! Your bid has been accepted' : 
             'Your bid has been rejected';
             
-          await createNotification('bid_status_update', 
+          await createNotification(
+            bid.supplier_id,
+            'bid_status_update', 
             statusMessage, 
-            bid.bid_id, 
-            bid.supplier_id);
+            bid.bid_id
+          );
         }
         
         toast.success(`Bid ${status.toLowerCase()} successfully`);
@@ -397,10 +405,12 @@ export function BiddingProvider({ children }) {
         const rfqBids = bids.filter(bid => bid.bid_id === rfqId);
         for (const bid of rfqBids) {
           if (bid.supplier_id) {
-            await createNotification('rfq_status_update', 
+            await createNotification(
+              bid.supplier_id,
+              'rfq_status_update', 
               `An RFQ you bid on has been ${status.toLowerCase()}`, 
-              rfqId, 
-              bid.supplier_id);
+              rfqId
+            );
           }
         }
         
@@ -433,23 +443,6 @@ export function BiddingProvider({ children }) {
   // Get a specific RFQ by ID
   const getRfqById = (rfqId) => {
     return rfqs.find(rfq => rfq.id === rfqId) || null;
-  };
-
-  // Create notification
-  const createNotification = async (type, message, relatedBid, recipientId) => {
-    try {
-      const { error } = await supabase.from('notifications').insert({
-        user_id: recipientId,
-        type,
-        message,
-        related_bid: relatedBid,
-        seen: false
-      });
-      
-      if (error) console.error('Failed to create notification:', error);
-    } catch (err) {
-      console.error('Failed to create notification:', err);
-    }
   };
 
   // Get notifications for the current user

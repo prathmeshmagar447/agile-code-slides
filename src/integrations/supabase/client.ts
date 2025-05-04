@@ -24,3 +24,22 @@ export const getUserRole = async () => {
   
   return data?.role;
 };
+
+// Helper function to create notification
+export const createNotification = async (userId, type, message, relatedBid = null) => {
+  try {
+    const { error } = await supabase.from('notifications').insert({
+      user_id: userId,
+      type,
+      message,
+      related_bid: relatedBid,
+      seen: false
+    });
+    
+    if (error) console.error('Failed to create notification:', error);
+    return !error;
+  } catch (err) {
+    console.error('Failed to create notification:', err);
+    return false;
+  }
+};
