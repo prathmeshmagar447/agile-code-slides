@@ -17,6 +17,7 @@ function App() {
       <BiddingProvider>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/company/*" element={<CompanyDashboard />} />

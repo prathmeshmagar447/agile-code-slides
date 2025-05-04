@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Box, Typography, CircularProgress, Container, Paper } from '@mui/material'
@@ -5,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import SupplierDashboard from './SupplierDashboard'
 import CompanyDashboard from './CompanyDashboard'
 import ConsumerDashboard from './ConsumerDashboard'
+import MainLayout from '../components/layout/MainLayout'
 
 function Dashboard() {
   const { currentUser, userRole } = useAuth()
@@ -13,13 +15,16 @@ function Dashboard() {
   
   // Redirect based on user role
   useEffect(() => {
-    if (!currentUser) {
-      navigate('/login')
-      return
-    }
+    // Short delay to ensure auth context is fully loaded
+    const checkAuth = setTimeout(() => {
+      if (!currentUser) {
+        navigate('/login')
+        return
+      }
+      setLoading(false)
+    }, 500)
     
-    // Set loading to false after checking user
-    setLoading(false)
+    return () => clearTimeout(checkAuth)
   }, [currentUser, navigate])
   
   // Show loading indicator while checking authentication
@@ -50,24 +55,26 @@ function Dashboard() {
     default:
       // If no valid role, show error message
       return (
-        <Container maxWidth="md" sx={{ mt: 5 }}>
-          <Paper sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="h4" color="error" gutterBottom>
-              Access Error
-            </Typography>
-            <Typography variant="body1" paragraph>
-              Your account doesn't have a valid role assigned. Please contact the system administrator.
-            </Typography>
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="body2" color="text.secondary">
-                User ID: {currentUser.uid}
+        <MainLayout>
+          <Container maxWidth="md" sx={{ mt: 5 }}>
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h4" color="error" gutterBottom>
+                Access Error
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Current Role: {userRole || 'None'}
+              <Typography variant="body1" paragraph>
+                Your account doesn't have a valid role assigned. Please contact the system administrator.
               </Typography>
-            </Box>
-          </Paper>
-        </Container>
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="body2" color="text.secondary">
+                  User ID: {currentUser.id}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Current Role: {userRole || 'None'}
+                </Typography>
+              </Box>
+            </Paper>
+          </Container>
+        </MainLayout>
       )
   }
 }
