@@ -1,6 +1,7 @@
+
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import supabase from '../supabase'
+import { supabase } from '../integrations/supabase/client'
 
 const AuthContext = createContext()
 
@@ -128,54 +129,6 @@ export function AuthProvider({ children }) {
         })
         
         if (updateError) console.error('Error updating display name:', updateError)
-      }
-      
-      // Add user to the appropriate table based on role
-      if (data.user) {
-        const userId = data.user.id
-        let roleTableError = null
-        
-        // Add user to the appropriate table based on role
-        if (userData.role === 'supplier') {
-          const { error } = await supabase
-            .from('suppliers')
-            .insert([{ 
-              supplier_id: userId,
-              created_at: new Date(),
-              category: '',
-              contact: '',
-              rating: ''
-            }])
-            .select()
-          
-          roleTableError = error
-        } else if (userData.role === 'company') {
-          const { error } = await supabase
-            .from('company')
-            .insert([{ 
-              company_id: userId,
-              created_at: new Date()
-            }])
-            .select()
-          
-          roleTableError = error
-        } else if (userData.role === 'consumer') {
-          const { error } = await supabase
-            .from('consumers')
-            .insert([{ 
-              consumer_id: userId,
-              created_at: new Date()
-            }])
-            .select()
-          
-          roleTableError = error
-        }
-        
-        if (roleTableError) {
-          console.error(`Error adding user to ${userData.role} table:`, roleTableError)
-          // If adding to role table fails, we should throw an error to notify the user
-          throw new Error(`Failed to complete registration. Error adding user to ${userData.role} database.`)
-        }
       }
       
       console.log('User registered successfully:', data)

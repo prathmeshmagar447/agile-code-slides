@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { useNavigate, Link as RouterLink } from 'react-router-dom'
 import {
@@ -138,9 +139,6 @@ function Register() {
         setSubmitError('This email is already registered or invalid. Please use another email address.')
       } else if (err.message.includes('password')) {
         setSubmitError('Password error: ' + err.message)
-      } else if (err.message.includes('adding user to')) {
-        // Handle role-based table insertion errors
-        setSubmitError(err.message)
       } else {
         setSubmitError(err.message || 'Registration failed. Please try again.')
       }

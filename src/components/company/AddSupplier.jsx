@@ -18,7 +18,7 @@ import {
   ArrowBack as ArrowBackIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
-import supabase from '../../supabase';
+import { supabase } from '../../integrations/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 
 const AddSupplier = ({ setCompanyView }) => {
