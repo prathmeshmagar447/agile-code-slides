@@ -1,7 +1,7 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import supabase from '../supabase';
+import { supabase } from '../integrations/supabase/client';
 import { toast } from 'react-hot-toast';
 
 const BiddingContext = createContext();
