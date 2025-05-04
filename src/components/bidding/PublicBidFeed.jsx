@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBidding } from '../../contexts/BiddingContext';
@@ -34,7 +33,7 @@ import { format, isAfter } from 'date-fns';
 
 const PublicBidFeed = () => {
   const navigate = useNavigate();
-  const { getAllRfqs, submitBid } = useBidding();
+  const { getAllRfqs, submitBid, refreshData } = useBidding();
   const { currentUser, userRole } = useAuth();
   
   const [rfqs, setRfqs] = useState([]);
@@ -54,17 +53,29 @@ const PublicBidFeed = () => {
     terms: ''
   });
   
-  // Load RFQs on component mount
-  useEffect(() => {
-    loadRfqs();
-  }, []);
-  
+  // Load RFQs on component mount and when user navigates to this page
   const loadRfqs = async () => {
     setLoading(true);
-    const fetchedRfqs = await getAllRfqs();
-    setRfqs(fetchedRfqs);
-    setLoading(false);
+    try {
+      const fetchedRfqs = await getAllRfqs();
+      setRfqs(fetchedRfqs || []);
+    } catch (error) {
+      console.error("Error loading RFQs:", error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    loadRfqs();
+    
+    // Set up a refresh interval
+    const interval = setInterval(() => {
+      loadRfqs();
+    }, 60000); // Refresh every minute
+    
+    return () => clearInterval(interval);
+  }, []);
   
   // Filter RFQs based on search term and filters
   const filteredRfqs = rfqs.filter(rfq => {
@@ -108,7 +119,10 @@ const PublicBidFeed = () => {
     try {
       await submitBid(selectedRfq.id, bidData);
       setBidFormOpen(false);
-      loadRfqs(); // Refresh the list
+      
+      // Refresh data after bid submission
+      await refreshData();
+      loadRfqs();
     } catch (error) {
       console.error('Error submitting bid:', error);
     }

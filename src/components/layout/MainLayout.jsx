@@ -1,3 +1,4 @@
+
 import { Box, AppBar, Toolbar, Typography, Button, Avatar, Menu, MenuItem } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -21,8 +22,17 @@ function MainLayout({ children }) {
   }
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/login')
+    try {
+      await logout()
+      navigate('/login')
+      handleClose()
+    } catch (error) {
+      console.error("Logout error:", error)
+    }
+  }
+
+  const handleProfile = () => {
+    // For now just close the menu, but could navigate to a profile page
     handleClose()
   }
 
@@ -45,11 +55,11 @@ function MainLayout({ children }) {
                     <Avatar 
                       sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}
                     >
-                      {currentUser.name.charAt(0).toUpperCase()}
+                      {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
                     </Avatar>
                   }
                 >
-                  {currentUser.name}
+                  {currentUser.name || 'User'}
                 </Button>
                 <Menu
                   id="menu-appbar"
@@ -66,7 +76,7 @@ function MainLayout({ children }) {
                   open={Boolean(anchorEl)}
                   onClose={handleClose}
                 >
-                  <MenuItem onClick={handleClose}>Profile</MenuItem>
+                  <MenuItem onClick={handleProfile}>Profile</MenuItem>
                   <MenuItem onClick={handleLogout}>Logout</MenuItem>
                 </Menu>
               </>

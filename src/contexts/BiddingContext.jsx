@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, createNotification } from '../integrations/supabase/client';
@@ -18,7 +17,7 @@ export function BiddingProvider({ children }) {
   const [bids, setBids] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
-  // Load data from Supabase on mount
+  // Load data from Supabase on mount or when user changes
   useEffect(() => {
     if (currentUser) {
       loadRfqsFromSupabase();
@@ -31,7 +30,7 @@ export function BiddingProvider({ children }) {
   const loadRfqsFromSupabase = async () => {
     setLoading(true);
     try {
-      let query = supabase.from('bids').select('*');
+      let query = supabase.from('bids').select('*').order('created_at', { ascending: false });
       
       if (userRole === 'company') {
         query = query.eq('created_by', currentUser.id);
@@ -188,7 +187,7 @@ export function BiddingProvider({ children }) {
           status: 'Posted',
         };
         
-        setRfqs(prevRfqs => [...prevRfqs, enhancedRfq]);
+        setRfqs(prevRfqs => [enhancedRfq, ...prevRfqs]);
         
         // Notify all suppliers of new RFQ
         const { data: suppliersData } = await supabase
@@ -208,6 +207,10 @@ export function BiddingProvider({ children }) {
         }
         
         toast.success('RFQ created successfully');
+        
+        // Reload RFQs to ensure UI is up to date
+        loadRfqsFromSupabase();
+        
         return enhancedRfq;
       }
     } catch (err) {

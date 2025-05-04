@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBidding } from '../../contexts/BiddingContext';
@@ -22,7 +21,7 @@ import { format } from 'date-fns';
 
 const CreateRfq = () => {
   const navigate = useNavigate();
-  const { createRfq, loading, error } = useBidding();
+  const { createRfq, loading, error, refreshData } = useBidding();
   
   const [formData, setFormData] = useState({
     itemName: '',
@@ -55,6 +54,11 @@ const CreateRfq = () => {
     
     try {
       const rfq = await createRfq(formData);
+      
+      // Refresh data to ensure UI is updated
+      await refreshData();
+      
+      // Navigate to bids page
       navigate('/bids');
     } catch (err) {
       console.error('Error creating RFQ:', err);
