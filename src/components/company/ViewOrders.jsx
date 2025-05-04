@@ -21,7 +21,7 @@ import {
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import AddOrder from './AddOrder';
-import supabase from '../../supabase';
+import { supabase } from '../../integrations/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ViewOrders = ({ setCompanyView }) => {
