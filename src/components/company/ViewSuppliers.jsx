@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import {
   Container,
@@ -20,7 +21,7 @@ import {
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import AddSupplier from './AddSupplier';
-import supabase from '../../supabase';
+import { supabase } from '../../integrations/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ViewSuppliers = ({ setCompanyView }) => {
