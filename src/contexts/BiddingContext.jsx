@@ -31,6 +31,10 @@ export function BiddingProvider({ children }) {
     try {
       let query = supabase.from('bids').select('*');
       
+      if (userRole === 'company') {
+        query = query.eq('created_by', currentUser.id);
+      }
+      
       const { data, error } = await query;
       
       if (error) throw error;
