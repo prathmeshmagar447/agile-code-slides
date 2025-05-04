@@ -34,7 +34,7 @@ import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon
 } from '@mui/icons-material';
-import supabase from '../../supabase';
+import { supabase } from '../../integrations/supabase/client';
 import AddOrder from './AddOrder';
 
 const ManageOrders = ({ dashboardData, setDashboardData, setCompanyView }) => {
